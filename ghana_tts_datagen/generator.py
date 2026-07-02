@@ -140,10 +140,33 @@ def load_instance(model_id: str = MODEL_ID, precision: str = "fp32"):
     return model
 
 
+def resolve_speakers(overrides: dict | None = None) -> dict:
+    """Merge optional speaker overrides with the built-in ``SPEAKERS``.
+
+    ``overrides`` is a dict keyed by gender (``"male"``, ``"female"``) whose
+    values can have ``"wav"`` (path to WAV) and optionally ``"text"`` (prompt
+    transcript).  If ``"text"`` is omitted it is read from a sibling ``.txt``
+    (the WAV path with ``.wav`` → ``.txt``).  Unspecified genders keep the
+    bundled speaker.
+    """
+    resolved = dict(SPEAKERS)
+    if overrides:
+        for gender, sp in overrides.items():
+            wav = sp.get("wav")
+            if wav is None:
+                continue
+            txt_path = sp.get("txt") or Path(str(wav).replace(".wav", ".txt"))
+            text = sp.get("text") or txt_path.read_text(encoding="utf-8").strip()
+            resolved[gender] = {"wav": str(wav), "txt": str(txt_path), "text": text}
+    return resolved
+
+
 def _generate_one(model, caches: dict, text: str, gender: str,
-                  cfg_value: float, steps: int) -> np.ndarray:
+                  cfg_value: float, steps: int,
+                  speakers: dict | None = None) -> np.ndarray:
+    spk = speakers or SPEAKERS
     if gender not in caches:
-        sp = SPEAKERS[gender]
+        sp = spk[gender]
         caches[gender] = model.tts_model.build_prompt_cache(
             prompt_text=sp["text"], prompt_wav_path=sp["wav"]
         )
@@ -181,6 +204,7 @@ class _Run:
         self.steps = 10
         self.sample_rate = DEFAULT_SR
         self.precision = "fp32"
+        self.speakers: dict | None = None
 
 
 def _worker(run: _Run, model_id: str):
@@ -199,7 +223,8 @@ def _worker(run: _Run, model_id: str):
                 break
             continue
         try:
-            wav = _generate_one(model, caches, text, gender, run.cfg_value, run.steps)
+            wav = _generate_one(model, caches, text, gender, run.cfg_value, run.steps,
+                                speakers=run.speakers)
             wav = resample(wav, SAMPLE_RATE, run.sample_rate)
             dur = float(len(wav)) / run.sample_rate
             uid = f"{idx:07d}_{run.run_id}"
@@ -255,6 +280,7 @@ def generate(
     model_id: str = MODEL_ID,
     token: str | None = None,
     save_every: int = 200,
+    speakers: dict | None = None,
     on_clip=None,
     progress=None,
 ):
@@ -265,6 +291,10 @@ def generate(
     ``manifest.jsonl`` and ``progress.json``. Resumes automatically if
     ``out_dir/progress.json`` exists (skips done rows). ``on_clip(seconds)`` fires
     as clips land; ``progress(msg)`` for status. Returns a summary dict.
+
+    ``speakers`` — optional dict keyed by gender (``"male"``, ``"female"``) with
+    ``"wav"`` and optionally ``"text"`` keys.  If omitted the bundled reference
+    speakers are used.  See :func:`resolve_speakers`.
     """
     if texts is None and not (dataset and text_column):
         raise ValueError("Provide either texts=[...] or dataset=... with text_column=...")
@@ -278,6 +308,7 @@ def generate(
     run.sample_rate = int(sample_rate)
     run.precision = precision
     run.wav_dir = os.path.join(out_dir, "wavs")
+    run.speakers = resolve_speakers(speakers)
 
     prog_path = Path(out_dir, "progress.json")
     if prog_path.exists():
@@ -351,15 +382,17 @@ def generate(
 def preview(*, out_dir, dataset=None, text_column=None, texts=None, config=None,
             split="train", voices="custom", male_pct=50, sample_rate=DEFAULT_SR,
             precision="fp32", cfg_value=2.0, steps=10, n=5, max_chars=400,
-            model_id=MODEL_ID, token=None):
+            model_id=MODEL_ID, token=None, speakers=None):
     """Generate ``n`` preview clips into ``out_dir/preview`` and return their info.
 
     Source is ``texts=[...]`` or an HF ``dataset`` + ``text_column``.
+    ``speakers`` — optional overrides, see :func:`generate`.
     """
     pdir = Path(out_dir, "preview")
     pdir.mkdir(parents=True, exist_ok=True)
     model = load_instance(model_id, precision)
     caches: dict = {}
+    spk = resolve_speakers(speakers)
     if texts is not None:
         source = ((i, t) for i, t in enumerate(texts))
     else:
@@ -374,7 +407,8 @@ def preview(*, out_dir, dataset=None, text_column=None, texts=None, config=None,
         if not (2 <= len(text) <= max_chars):
             continue
         gender = pick_gender(idx, voices, male_pct)
-        wav = _generate_one(model, caches, text, gender, cfg_value, steps)
+        wav = _generate_one(model, caches, text, gender, cfg_value, steps,
+                            speakers=spk)
         wav = resample(wav, SAMPLE_RATE, int(sample_rate))
         path = pdir / f"preview_{len(out)+1}_{gender}.wav"
         sf.write(str(path), wav, int(sample_rate), subtype="PCM_16")

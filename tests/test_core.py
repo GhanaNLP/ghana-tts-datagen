@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ghana_tts_datagen import clean_text, pick_gender, sanitize_name, trim_silences, SPEAKERS
+from ghana_tts_datagen import clean_text, pick_gender, sanitize_name, trim_silences, SPEAKERS, resolve_speakers
 from ghana_tts_datagen import cli
 
 
@@ -54,6 +54,29 @@ def test_speakers_loaded():
         assert Path(SPEAKERS[g]["wav"]).exists()
 
 
+def test_resolve_speakers_default():
+    spk = resolve_speakers(None)
+    assert spk["male"]["text"] == SPEAKERS["male"]["text"]
+    assert spk["female"]["text"] == SPEAKERS["female"]["text"]
+
+
+def test_resolve_speakers_custom(tmp_path):
+    txt = tmp_path / "custom.txt"
+    txt.write_text("custom prompt", encoding="utf-8")
+    wav = tmp_path / "custom.wav"
+    wav.touch()
+    overrides = {"male": {"wav": str(wav), "txt": txt}}
+    spk = resolve_speakers(overrides)
+    assert spk["male"]["text"] == "custom prompt"
+    assert spk["female"]["text"] == SPEAKERS["female"]["text"]  # unchanged
+
+
+def test_resolve_speakers_inline_text():
+    overrides = {"male": {"wav": "/dummy.wav", "text": "inline text"}}
+    spk = resolve_speakers(overrides)
+    assert spk["male"]["text"] == "inline text"
+
+
 def test_precision_and_instances():
     from ghana_tts_datagen import auto_instances
     a = cli.build_parser().parse_args(
@@ -89,6 +112,29 @@ def test_export_formats(tmp_path):
     assert (run / "speakers.txt").exists()
     ml = (run / "metadata.list").read_text().splitlines()[0].split("|")
     assert ml[0] == "wavs/0000000_ab.wav" and ml[2] == "TWI"
+
+
+def test_cli_speaker_args():
+    a = cli.build_parser().parse_args(["--text-file", "s.txt", "--speaker-dir", "/speakers"])
+    assert a.speaker_dir == "/speakers"
+    b = cli.build_parser().parse_args(
+        ["--text-file", "s.txt", "--speaker-male", "m.wav", "--speaker-female", "f.wav"])
+    assert b.speaker_male == "m.wav" and b.speaker_female == "f.wav"
+
+
+def test_cli_build_speakers():
+    class Args:
+        speaker_dir = None
+        speaker_male = "/custom/m.wav"
+        speaker_male_text = "male prompt"
+        speaker_female = "/custom/f.wav"
+        speaker_female_text = None
+    spk = cli._build_speakers(Args())
+    assert spk["male"]["wav"] == "/custom/m.wav"
+    assert spk["male"]["text"] == "male prompt"
+    assert spk["female"]["wav"] == "/custom/f.wav"
+    # female text should be None (will be resolved by resolve_speakers later)
+    assert "text" not in spk["female"]
 
 
 def test_cli_parser_and_requirements():

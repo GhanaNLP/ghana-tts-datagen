@@ -17,6 +17,7 @@ from .generator import (
     generate,
     pick_gender,
     preview,
+    resolve_speakers,
     sanitize_name,
     trim_silences,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "generate",
     "pick_gender",
     "preview",
+    "resolve_speakers",
     "sanitize_name",
     "trim_silences",
 ]

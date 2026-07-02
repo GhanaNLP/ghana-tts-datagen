@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from .generator import DEFAULT_SR, MODEL_ID, sanitize_name
 
@@ -70,12 +71,45 @@ def build_parser() -> argparse.ArgumentParser:
     out.add_argument("--private", action="store_true", help="make the pushed repo private")
     out.add_argument("--token", help="HF token (else HF_TOKEN env)")
 
+    spk = p.add_argument_group("speaker reference audio (default: bundled Twi male/female)")
+    spk.add_argument("--speaker-dir",
+                     help="directory with male.wav+txt and female.wav+txt (overrides all below)")
+    spk.add_argument("--speaker-male", metavar="WAV",
+                     help="custom male reference WAV (transcript: sibling .txt file)")
+    spk.add_argument("--speaker-male-text",
+                     help="male prompt transcript (skip if using sibling .txt)")
+    spk.add_argument("--speaker-female", metavar="WAV",
+                     help="custom female reference WAV (transcript: sibling .txt file)")
+    spk.add_argument("--speaker-female-text",
+                     help="female prompt transcript (skip if using sibling .txt)")
+
     misc = p.add_argument_group("misc")
     misc.add_argument("--preview", type=int, metavar="N",
                       help="generate N preview clips and exit (no full run)")
     misc.add_argument("--list-datasets", action="store_true",
                       help=f"list datasets under the {DATASET_ORG} org and exit")
     return p
+
+
+def _build_speakers(args) -> dict | None:
+    """Convert CLI speaker args to the speakers dict expected by generator."""
+    overrides: dict = {}
+    if args.speaker_dir:
+        d = Path(args.speaker_dir)
+        overrides["male"] = {"wav": str(d / "male.wav"), "txt": d / "male.txt"}
+        overrides["female"] = {"wav": str(d / "female.wav"), "txt": d / "female.txt"}
+        return overrides
+    if args.speaker_male:
+        m: dict = {"wav": args.speaker_male}
+        if args.speaker_male_text:
+            m["text"] = args.speaker_male_text
+        overrides["male"] = m
+    if args.speaker_female:
+        f: dict = {"wav": args.speaker_female}
+        if args.speaker_female_text:
+            f["text"] = args.speaker_female_text
+        overrides["female"] = f
+    return overrides or None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -99,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from . import generator
 
+    speakers = _build_speakers(args)
     name = args.name or default_name
     out_dir = args.out or os.path.join("data", name)
 
@@ -110,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             sample_rate=args.sample_rate, precision=args.precision,
             cfg_value=args.cfg_value, steps=args.steps,
             n=args.preview, max_chars=args.max_chars, model_id=args.model, token=args.token,
+            speakers=speakers,
         )
         for c in clips:
             print(f"  [{c['gender']}] {c['duration']}s  {c['file']}\n      {c['text'][:90]}")
@@ -133,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
         precision=args.precision, instances=args.instances,
         cfg_value=args.cfg_value, steps=args.steps, max_chars=args.max_chars,
         model_id=args.model, token=args.token, save_every=args.save_every,
+        speakers=speakers,
         on_clip=_on_clip, progress=lambda m: bar.set_description(m[:48]),
     )
     bar.close()
