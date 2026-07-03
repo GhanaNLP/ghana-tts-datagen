@@ -1,6 +1,6 @@
-# Ghana TTS DataGen
+# Ghana Speech Datagen
 
-Turn a **text dataset** into **synthetic TTS training audio** — streamed through
+Turn a **text dataset** into **synthetic speech training data** (TTS / ASR) — streamed through
 the Ghana NLP Community VoxCPM model (`ghana-tts-36k`), voice-cloning built-in
 male/female reference speakers. It writes WAVs (resampled to your target rate) +
 a manifest locally, runs multiple model instances in parallel, and resumes where
