@@ -1,16 +1,16 @@
-"""Command-line interface for the Ghana TTS VoxCPM synthetic-speech generator.
+"""Command-line interface for the Ghana Speech Datagen VoxCPM generator.
 
-Generate synthetic TTS training data from a text dataset, locally. Examples:
+Generate synthetic speech training data (TTS / ASR) from a text dataset. Examples:
 
     # Preview 5 clips before a big run (needs a GPU)
-    ghana-tts-datagen --dataset ghananlpcommunity/some-text --text-column text --preview 5
+    ghana-speech-datagen --dataset ghananlpcommunity/some-text --text-column text --preview 5
 
     # Generate 5 hours, 50/50 male/female, into data/<name>
-    ghana-tts-datagen --dataset ghananlpcommunity/some-text --text-column text \\
+    ghana-speech-datagen --dataset ghananlpcommunity/some-text --text-column text \\
         --hours 5 --name twi-run
 
     # Data is auto-pushed to your HF account every 200 rows (no loss on crash)
-    ghana-tts-datagen --dataset … --text-column text --hours 5 --name twi-run
+    ghana-speech-datagen --dataset … --text-column text --hours 5 --name twi-run
 
 The model is **private** — set HF_TOKEN in your environment or pass --token.
 Data is automatically pushed to a dataset repo on your HF account as it's
@@ -32,7 +32,7 @@ DATASET_ORG = "ghananlpcommunity"
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="ghana-tts-datagen", description=__doc__,
+        prog="ghana-speech-datagen", description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     src = p.add_argument_group("source (use --dataset OR --text-file)")

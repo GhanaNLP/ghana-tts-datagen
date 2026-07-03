@@ -17,7 +17,7 @@ for the full list.
 
 ## Run in the cloud
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GhanaNLP/ghana-tts-datagen/blob/main/notebooks/ghana_tts_datagen.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GhanaNLP/ghana-speech-datagen/blob/main/notebooks/ghana_speech_datagen.ipynb)
 
 Pick a **GPU** runtime (Colab: `Runtime → Change runtime type → GPU`).
 
@@ -28,11 +28,11 @@ Pick a **GPU** runtime (Colab: `Runtime → Change runtime type → GPU`).
 > a GPU.
 
 ```bash
-git clone https://github.com/ghananlpcommunity/ghana-tts-datagen.git
-cd ghana-tts-datagen
+git clone https://github.com/ghananlpcommunity/ghana-speech-datagen.git
+cd ghana-speech-datagen
 python3 -m venv .venv && source .venv/bin/activate
 sudo apt-get install -y ffmpeg          # system dependency
-pip install -e .                        # gives you the `ghana-tts-datagen` command
+pip install -e .                        # gives you the `ghana-speech-datagen` command
 ```
 
 ## Quickstart
@@ -42,17 +42,17 @@ per line). Output is written in **LJSpeech** (TTS) or **ASR** format (`--format`
 
 ```bash
 # Preview 5 clips first (hear it before a big run)
-ghana-tts-datagen --dataset ghananlpcommunity/your-text-dataset --text-column text --preview 5
+ghana-speech-datagen --dataset ghananlpcommunity/your-text-dataset --text-column text --preview 5
 
 # From an HF dataset → 5 h, LJSpeech layout (default), into data/<name>
-ghana-tts-datagen --dataset ghananlpcommunity/your-text-dataset --text-column text \
+ghana-speech-datagen --dataset ghananlpcommunity/your-text-dataset --text-column text \
     --hours 5 --name twi-run --format ljspeech
 
 # From your own sentences (one per line) → ASR format (audio + text)
-ghana-tts-datagen --text-file sentences.txt --hours 2 --format asr
+ghana-speech-datagen --text-file sentences.txt --hours 2 --format asr
 
 # Randomly sample 5000 texts from a large dataset, both formats
-ghana-tts-datagen --dataset org/big-text --text-column text --max-samples 5000 \
+ghana-speech-datagen --dataset org/big-text --text-column text --max-samples 5000 \
     --hours 3 --format ljspeech,asr
 
 # Resume: re-run the same command (finished rows are skipped)
@@ -117,7 +117,7 @@ re-run the same command) and it reads `progress.json` and skips finished rows.
 ## Use as a library
 
 ```python
-from ghana_tts_datagen import generate, export_formats
+from ghana_speech_datagen import generate, export_formats
 
 summary = generate(out_dir="data/run", dataset="org/ds", text_column="text",
                    target_hours=5, voices="custom", male_pct=50,
@@ -137,11 +137,11 @@ pytest tests/
 ## Project layout
 
 ```
-ghana_tts_datagen/
-  cli.py             the `ghana-tts-datagen` command
+ghana_speech_datagen/
+  cli.py             the `ghana-speech-datagen` command
   generator.py       voice-clone, silence-trim, parallel run, resume, format export
   speakers/          built-in male/female reference wav + text
-notebooks/ghana_tts_datagen.ipynb   Colab (GPU) runner
+notebooks/ghana_speech_datagen.ipynb   Colab (GPU) runner
 tests/
 ```
 

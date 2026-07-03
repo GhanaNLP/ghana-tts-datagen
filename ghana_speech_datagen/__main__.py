@@ -1,4 +1,4 @@
-"""Enable `python -m ghana_tts_datagen ...` as an alias for the CLI."""
+"""Enable `python -m ghana_speech_datagen ...` as an alias for the CLI."""
 
 from .cli import main
 

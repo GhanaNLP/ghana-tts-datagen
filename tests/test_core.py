@@ -7,8 +7,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ghana_tts_datagen import clean_text, pick_gender, sanitize_name, trim_silences, SPEAKERS, resolve_speakers
-from ghana_tts_datagen import cli
+from ghana_speech_datagen import clean_text, pick_gender, sanitize_name, trim_silences, SPEAKERS, resolve_speakers
+from ghana_speech_datagen import cli
 
 
 def test_clean_text():
@@ -78,7 +78,7 @@ def test_resolve_speakers_inline_text():
 
 
 def test_precision_and_instances():
-    from ghana_tts_datagen import auto_instances
+    from ghana_speech_datagen import auto_instances
     a = cli.build_parser().parse_args(
         ["--text-file", "s.txt", "--precision", "bf16", "--sample-rate", "24000"])
     assert a.precision == "bf16" and a.sample_rate == 24000
@@ -88,7 +88,7 @@ def test_precision_and_instances():
 
 def test_export_formats(tmp_path):
     import json
-    from ghana_tts_datagen import export_formats
+    from ghana_speech_datagen import export_formats
 
     run = tmp_path / "run"
     (run / "wavs").mkdir(parents=True)
@@ -136,7 +136,7 @@ def test_cli_build_speakers():
 
 def test_generate_params():
     import inspect
-    from ghana_tts_datagen.generator import generate as _gen
+    from ghana_speech_datagen.generator import generate as _gen
     sig = inspect.signature(_gen)
     for kw in ("on_save", "max_samples", "min_duration", "max_duration"):
         assert kw in sig.parameters

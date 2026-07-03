@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ghana-tts-datagen"
+name = "ghana-speech-datagen"
 version = "0.1.0"
-description = "Generate synthetic TTS training data from text datasets with the Ghana NLP Community VoxCPM model (ghana-tts-36k) — voice-cloned male/female speakers, parallel instances, resume."
+description = "Generate synthetic speech training data (TTS/ASR) from text datasets with the Ghana NLP Community VoxCPM model (ghana-tts-36k) — voice-cloned male/female speakers, parallel instances, resume."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "CC-BY-4.0" }
@@ -29,10 +29,10 @@ dependencies = [
 ]
 
 [project.scripts]
-ghana-tts-datagen = "ghana_tts_datagen.cli:main"
+ghana-speech-datagen = "ghana_speech_datagen.cli:main"
 
 [tool.setuptools]
-packages = ["ghana_tts_datagen"]
+packages = ["ghana_speech_datagen"]
 
 [tool.setuptools.package-data]
-ghana_tts_datagen = ["speakers/*.wav", "speakers/*.txt"]
+ghana_speech_datagen = ["speakers/*.wav", "speakers/*.txt"]
