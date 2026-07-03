@@ -23,8 +23,9 @@ for the full list.
 
 Pick a **GPU** runtime (`Runtime → Change runtime type → GPU`).
 
-**Kaggle** — [![Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://kaggle.com)  
-Open the notebook via Kaggle's GitHub import: `https://github.com/GhanaNLP/ghana-speech-datagen/blob/main/examples/ghana_speech_datagen.ipynb`
+**Kaggle** — [![Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/new?script=true&githubUrl=https://github.com/GhanaNLP/ghana-speech-datagen/blob/main/examples/ghana_speech_datagen.ipynb)  
+
+Pick a **GPU** accelerator (`Settings → Accelerator → GPU`).
 
 **Modal** (serverless GPU) — no local setup needed:
 
