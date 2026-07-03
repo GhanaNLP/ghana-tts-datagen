@@ -8,6 +8,9 @@ it left off.
 
 > **A GPU is required** for usable speed (VoxCPM is a neural TTS model; ~4.5 GB
 > VRAM per instance). Instances are auto-sized from your GPU's VRAM.
+>
+> No GPU? Use the **Colab** or **Modal** runners below, or the `asr` subcommand
+> (repackages existing audio — no GPU needed).
 
 ## Supported languages
 
@@ -30,6 +33,9 @@ modal run examples/modal_run.py --dataset ghananlpcommunity/your-text-dataset --
 
 Requires a `hf-token` Modal secret with your Hugging Face token. See [`examples/modal_run.py`](examples/modal_run.py) for all options.
 
+> Note: the Modal runner uses `ghana-speech-datagen tts` under the hood — it
+> generates audio. It does not run the `asr` subcommand.
+
 ## Install (local)
 
 > **Local use needs an NVIDIA GPU.** Without one, use the **Colab notebook** or
@@ -43,10 +49,10 @@ sudo apt-get install -y ffmpeg          # system dependency
 pip install -e .                        # gives you the `ghana-speech-datagen` command
 ```
 
-## Quickstart
+## Quickstart — TTS (generate audio from text)
 
-Source is **either** an HF dataset column **or** a plain text file (one sentence
-per line). Output is written in **LJSpeech** (TTS) or **ASR** format (`--format`).
+Synthesise speech from text using VoxCPM. Output is **LJSpeech** format
+(`metadata.csv`).
 
 > `--text` names the column in the HF dataset that holds the sentences
 > to be turned into speech. For example, `--text text` means the dataset's
@@ -55,23 +61,45 @@ per line). Output is written in **LJSpeech** (TTS) or **ASR** format (`--format`
 
 ```bash
 # Preview 5 clips first (hear it before a big run)
-ghana-speech-datagen --dataset ghananlpcommunity/your-text-dataset --text text --preview 5
+ghana-speech-datagen tts --dataset ghananlpcommunity/your-text-dataset --text text --preview 5
 
-# From an HF dataset → 5 h, LJSpeech layout (default), into data/<name>
-ghana-speech-datagen --dataset ghananlpcommunity/your-text-dataset --text text \
-    --hours 5 --name twi-run --format ljspeech
+# From an HF dataset → 5 h, into data/<name>
+ghana-speech-datagen tts --dataset ghananlpcommunity/your-text-dataset --text text \
+    --hours 5 --name twi-run
 
-# From your own sentences (one per line) → ASR format (audio + text)
-ghana-speech-datagen --text-file sentences.txt --hours 2 --format asr
+# From your own sentences (one per line) → 2 h
+ghana-speech-datagen tts --text-file sentences.txt --hours 2
 
-# Randomly sample 5000 texts from a large dataset, both formats
-ghana-speech-datagen --dataset org/big-text --text text --max-samples 5000 \
-    --hours 3 --format ljspeech,asr
+# Randomly sample 5000 texts from a large dataset
+ghana-speech-datagen tts --dataset org/big-text --text text --max-samples 5000 \
+    --hours 3
 
 # Resume: re-run the same command (finished rows are skipped)
 ```
 
-## Output
+## Quickstart — ASR (repackage existing audio — no GPU)
+
+Validate, filter, and repackage an existing audio-text dataset into ASR format
+(`metadata.jsonl`). No generation happens — just audio validation, copying, and
+manifest writing. Requires ≥50 valid samples by default.
+
+```bash
+# From an HF dataset with audio + text columns
+ghana-speech-datagen asr --dataset org/audio-text-ds --audio-column audio --text-column text
+
+# From a local directory of audio files + metadata
+ghana-speech-datagen asr --audio-dir my_clips/ --metadata transcripts.csv
+
+# Apply duration filtering and sub-sampling
+ghana-speech-datagen asr --dataset org/audio-text-ds --audio-column audio \
+    --text-column text --min-duration 2.0 --max-duration 25.0 --max-samples 2000
+
+# Push result to a new HF dataset repo
+ghana-speech-datagen asr --dataset org/audio-text-ds --audio-column audio \
+    --text-column text --push my-asr-repo
+```
+
+## Output — TTS (`tts` subcommand)
 
 Everything lands in `data/<name>/` (override with `--out`):
 
@@ -80,12 +108,19 @@ data/twi-run/
   wavs/<id>.wav            mono, silence-trimmed, at --sample-rate (default 22050)
   manifest.jsonl           full info: id, file, text, gender, speaker, duration
   progress.json            resume state (re-run to continue)
-  # + the manifest(s) for the format(s) you asked for:
-  metadata.csv             ljspeech  →  id|text|text
-  metadata.jsonl           asr       →  {"audio":"...","text":"..."}
+  metadata.csv             ljspeech format:  id|text|text
 ```
 
-## Options
+## Output — ASR (`asr` subcommand)
+
+```
+data/my-repo/
+  wavs/<id>.<ext>          copied from source, same format as original
+  manifest.jsonl           full info: id, file, text, duration
+  metadata.jsonl           asr manifest:  {"audio":"...","text":"..."}
+```
+
+## Options — TTS (`tts` subcommand)
 
 | flag | meaning |
 |------|---------|
@@ -96,21 +131,37 @@ data/twi-run/
 | `--voices custom\|male\|female` | speaker selection (default `custom`) |
 | `--male-pct N` | %% male in `custom` mode (deterministic per row) |
 | `--max-chars N` | skip rows longer than this (default 400) |
-| `--sample-rate HZ` | output WAV rate (default 22050; e.g. 24000 for MeloTTS, 44100) |
+| `--sample-rate HZ` | output WAV rate (default 22050) |
 | `--precision fp32\|fp16\|bf16` | model precision (default fp32) — see Performance |
 | `--instances N` | parallel model instances (default: auto by VRAM) |
 | `--cfg` / `--steps` | CFG value / inference timesteps |
 | `--max-samples N` | randomly pick at most this many texts (sub-sample) |
 | `--min-duration` / `--max-duration` | skip clips shorter/longer than these (seconds) |
-| `--format` | export format(s): `ljspeech`, `asr`, or both (default `ljspeech`) |
 | `--name` / `--out` | run name (→ `data/<name>`) or explicit output dir |
 | `--push REPO [--private]` | upload the finished run to an HF dataset repo |
-| `--token` | HF token (else `HF_TOKEN` env) — for gated datasets/models |
+| `--token` | HF token — for gated datasets/models |
 | `--preview N` | generate N preview clips and exit |
 | `--list-datasets` | list datasets under the `ghananlpcommunity` org |
 
 Resuming is automatic: point `--name`/`--out` at an existing run folder (or just
 re-run the same command) and it reads `progress.json` and skips finished rows.
+
+## Options — ASR (`asr` subcommand)
+
+| flag | meaning |
+|------|---------|
+| `--dataset ID` | source: an HF dataset with audio+text columns |
+| `--audio-column COL` | column with audio (default `audio`) |
+| `--text-column COL` | column with transcripts (default `text`) |
+| `--config` / `--split` | dataset config / split (default split `train`) |
+| `--audio-dir DIR` | local dir with audio files (use with `--metadata`) |
+| `--metadata PATH` | CSV/JSONL mapping audio filenames to transcripts |
+| `--min-duration` / `--max-duration` | drop clips outside this range (seconds) |
+| `--max-samples N` | randomly pick at most this many rows from source |
+| `--min-samples N` | minimum valid samples required (default 50) |
+| `--name` / `--out` | run name (→ `data/<name>`) or explicit output dir |
+| `--push REPO [--private]` | upload the finished run to an HF dataset repo |
+| `--token` | HF token — for pushing / gated datasets |
 
 ## Performance & GPU
 
@@ -135,8 +186,7 @@ from ghana_speech_datagen import generate, export_formats
 summary = generate(out_dir="data/run", dataset="org/ds", text_column="text",
                    target_hours=5, voices="custom", male_pct=50,
                    max_samples=10000)
-export_formats("data/run", ["ljspeech", "asr"])
-print(summary)
+export_formats("data/run", ["ljspeech"])
 # {'rows': ..., 'hours': ..., 'errors': ..., 'duration_dropped': ...}
 ```
 

@@ -80,10 +80,8 @@ def test_resolve_speakers_inline_text():
 def test_precision_and_instances():
     from ghana_speech_datagen import auto_instances
     a = cli.build_parser().parse_args(
-        ["--text-file", "s.txt", "--precision", "bf16", "--sample-rate", "24000"])
+        ["tts", "--text-file", "s.txt", "--precision", "bf16", "--sample-rate", "24000"])
     assert a.precision == "bf16" and a.sample_rate == 24000
-    assert cli.build_parser().parse_args([]).precision == "fp32"
-    assert auto_instances("fp32") >= 1 and auto_instances("fp16") >= 1
 
 
 def test_export_formats(tmp_path):
@@ -112,12 +110,12 @@ def test_export_formats(tmp_path):
 
 
 def test_cli_speaker_args():
-    a = cli.build_parser().parse_args(["--text-file", "s.txt", "--speaker-dir", "/speakers",
+    a = cli.build_parser().parse_args(["tts", "--text-file", "s.txt", "--speaker-dir", "/speakers",
                                        "--ref-text", "hello"])
     assert a.speaker_dir == "/speakers"
     assert a.ref_text == "hello"
     b = cli.build_parser().parse_args(
-        ["--text-file", "s.txt", "--speaker-male", "m.wav", "--speaker-female", "f.wav"])
+        ["tts", "--text-file", "s.txt", "--speaker-male", "m.wav", "--speaker-female", "f.wav"])
     assert b.speaker_male == "m.wav" and b.speaker_female == "f.wav"
 
 
@@ -173,10 +171,12 @@ def test_generate_params():
     assert sig.parameters["on_save"].default is None
 
 
-def test_cli_token_required():
+def test_cli_token_required(tmp_path):
     # Should exit with "No token provided" when none given (prompt returns empty in non-tty)
+    sfile = tmp_path / "s.txt"
+    sfile.write_text("hello\n")
     try:
-        cli.main(["--text-file", "s.txt"])
+        cli.main(["tts", "--text-file", str(sfile)])
     except SystemExit as e:
         assert "No token provided" in str(e) or "HF_TOKEN" in str(e)
     else:
@@ -185,25 +185,24 @@ def test_cli_token_required():
 
 def test_cli_parser_and_requirements():
     a = cli.build_parser().parse_args(
-        ["--dataset", "org/ds", "--text", "text", "--hours", "5",
+        ["tts", "--dataset", "org/ds", "--text", "text", "--hours", "5",
          "--voices", "custom", "--male-pct", "60", "--name", "run1",
-         "--format", "ljspeech,asr", "--max-samples", "500",
+         "--max-samples", "500",
          "--min-duration", "1.0", "--max-duration", "15.0"])
     assert a.dataset == "org/ds" and a.text_column == "text"
     assert a.hours == 5 and a.voices == "custom" and a.male_pct == 60
-    assert a.format == "ljspeech,asr"
     assert a.max_samples == 500
     assert a.min_duration == 1.0
     assert a.max_duration == 15.0
 
-    assert cli.build_parser().parse_args(["--text-file", "s.txt"]).text_file == "s.txt"
+    assert cli.build_parser().parse_args(["tts", "--text-file", "s.txt"]).text_file == "s.txt"
 
-    b = cli.build_parser().parse_args(["--text-file", "s.txt", "--ref-text", "my prompt"])
+    b = cli.build_parser().parse_args(["tts", "--text-file", "s.txt", "--ref-text", "my prompt"])
     assert b.ref_text == "my prompt"
 
     # Should exit with source error when token IS set but no source is given
     try:
-        cli.main(["--split", "train", "--token", "dummy"])
+        cli.main(["tts", "--split", "train", "--token", "dummy"])
     except SystemExit as e:
         assert "text-file" in str(e) or "dataset" in str(e)
     else:

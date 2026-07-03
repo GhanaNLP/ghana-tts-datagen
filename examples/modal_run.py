@@ -38,11 +38,9 @@ def run(
     split: str = "train",
     hours: float = 1.0,
     name: str = "modal-run",
-    format: str = "ljspeech",
     max_samples: int | None = None,
     min_duration: float | None = None,
     max_duration: float | None = None,
-    asr_format: str | None = None,
     push_repo: str | None = None,
     private: bool = False,
 ):
@@ -56,13 +54,12 @@ def run(
     os.environ["HF_TOKEN"] = hf_token
 
     argv = [
-        "ghana-speech-datagen",
+        "ghana-speech-datagen", "tts",
         "--dataset", dataset,
         "--text", text_column,
         "--split", split,
         "--hours", str(hours),
         "--name", name,
-        "--format", format,
     ]
     if config:
         argv += ["--config", config]

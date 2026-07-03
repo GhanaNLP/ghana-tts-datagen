@@ -40,7 +40,7 @@ for _g, _s in SPEAKERS.items():
 
 
 # --------------------------------------------------------------------------- #
-# Pure helpers (no model / GPU needed — unit-testable)
+# Pure helpers (no model / GPU needed -- unit-testable)
 # --------------------------------------------------------------------------- #
 def clean_text(text: str) -> str:
     text = str(text).replace("\n", " ")
@@ -305,17 +305,17 @@ def generate(
     ``out_dir/progress.json`` exists (skips done rows). ``on_clip(seconds)`` fires
     as clips land; ``progress(msg)`` for status. Returns a summary dict.
 
-    ``max_samples`` — randomly pick at most this many rows from the source (for
+    ``max_samples`` -- randomly pick at most this many rows from the source (for
     randomised sub-sampling of large datasets).  Applied *before* generation.
 
-    ``min_duration`` / ``max_duration`` — skip generated clips whose audio length
+    ``min_duration`` / ``max_duration`` -- skip generated clips whose audio length
     (seconds) falls outside this range.  Dropped clips count toward the summary
     ``"duration_dropped"`` field.
 
-    ``speakers`` — optional dict keyed by gender (``"male"``, ``"female"``) with
+    ``speakers`` -- optional dict keyed by gender (``"male"``, ``"female"``) with
     ``"wav"`` and optionally ``"text"`` keys.  If omitted the bundled reference
     speakers are used.  See :func:`resolve_speakers`.
-    ``on_save(out_dir)`` — called after each manifest write (every ``save_every``
+    ``on_save(out_dir)`` -- called after each manifest write (every ``save_every``
     rows and at the end).  Useful for incremental push to Hugging Face.
     """
     if texts is None and not (dataset and text_column):
@@ -341,7 +341,7 @@ def generate(
         run.rows = dict(prev.get("rows", {}))
         run.total_seconds = float(prev.get("total_seconds", 0.0))
         if progress:
-            progress(f"resuming {out_dir} — {len(run.rows)} rows / "
+            progress(f"resuming {out_dir} -- {len(run.rows)} rows / "
                      f"{run.total_seconds/3600:.2f} h already done")
     else:
         run.run_id = uuid.uuid4().hex[:8]
@@ -420,7 +420,7 @@ def preview(*, out_dir, dataset=None, text_column=None, texts=None, config=None,
     """Generate ``n`` preview clips into ``out_dir/preview`` and return their info.
 
     Source is ``texts=[...]`` or an HF ``dataset`` + ``text_column``.
-    ``speakers`` — optional overrides, see :func:`generate`.
+    ``speakers`` -- optional overrides, see :func:`generate`.
     """
     pdir = Path(out_dir, "preview")
     pdir.mkdir(parents=True, exist_ok=True)

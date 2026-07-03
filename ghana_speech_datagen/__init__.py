@@ -1,4 +1,5 @@
-"""VoxCPM synthetic-speech data generator — turn text datasets into TTS/ASR training data.
+# -*- coding: utf-8 -*-
+"""VoxCPM synthetic-speech data generator -- turn text datasets into TTS/ASR training data.
 
 Voice-clones built-in male/female reference speakers with the Ghana NLP Community
 VoxCPM model (ghana-tts-36k), writing WAVs + a manifest, with parallel instances
