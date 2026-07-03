@@ -74,8 +74,6 @@ def build_parser() -> argparse.ArgumentParser:
     out.add_argument("--save-every", type=int, default=200, help="write manifest every N rows")
     out.add_argument("--push", metavar="REPO_ID",
                      help="override auto-generated HF dataset repo (default: <user>/ghana-tts-synth-<name>)")
-    out.add_argument("--description", default="",
-                     help="description for the pushed HF dataset repo")
     out.add_argument("--private", action="store_true",
                      help="make the dataset repo private (default: public)")
     out.add_argument("--token", help="HF token (required; falls back to HF_TOKEN env)")
@@ -180,10 +178,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         who = HfApi(token=args.token).whoami()
         push_repo = f"{who['name']}/ghana-tts-synth-{name}"
-    repo_desc = args.description or f"Synthetic speech data generated with ghana-tts-datagen ({name})"
     create_repo(push_repo, repo_type="dataset", token=args.token,
-                private=args.private, exist_ok=True,
-                description=repo_desc)
+                private=args.private, exist_ok=True)
     push_url = f"https://huggingface.co/datasets/{push_repo}"
     print(f"Dataset will be pushed to: {push_url}", file=sys.stderr)
 

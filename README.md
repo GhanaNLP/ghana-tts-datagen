@@ -90,7 +90,6 @@ data/twi-run/
 | `--max-samples N` | randomly pick at most this many texts (sub-sample) |
 | `--min-duration` / `--max-duration` | skip clips shorter/longer than these (seconds) |
 | `--format` | export format(s): `ljspeech`, `asr`, or both (default `ljspeech`) |
-| `--description` | description for the pushed HF dataset repo |
 | `--name` / `--out` | run name (→ `data/<name>`) or explicit output dir |
 | `--push REPO [--private]` | upload the finished run to an HF dataset repo |
 | `--token` | HF token (else `HF_TOKEN` env) — for gated datasets/models |

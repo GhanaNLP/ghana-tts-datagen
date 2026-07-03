@@ -158,15 +158,13 @@ def test_cli_parser_and_requirements():
         ["--dataset", "org/ds", "--text-column", "text", "--hours", "5",
          "--voices", "custom", "--male-pct", "60", "--name", "run1",
          "--format", "ljspeech,asr", "--max-samples", "500",
-         "--min-duration", "1.0", "--max-duration", "15.0",
-         "--description", "Twi ASR data"])
+         "--min-duration", "1.0", "--max-duration", "15.0"])
     assert a.dataset == "org/ds" and a.text_column == "text"
     assert a.hours == 5 and a.voices == "custom" and a.male_pct == 60
     assert a.format == "ljspeech,asr"
     assert a.max_samples == 500
     assert a.min_duration == 1.0
     assert a.max_duration == 15.0
-    assert a.description == "Twi ASR data"
 
     assert cli.build_parser().parse_args(["--text-file", "s.txt"]).text_file == "s.txt"
 
