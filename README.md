@@ -17,15 +17,23 @@ for the full list.
 
 ## Run in the cloud
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GhanaNLP/ghana-speech-datagen/blob/main/examples/ghana_speech_datagen.ipynb)
+**Colab** (free GPU) — [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GhanaNLP/ghana-speech-datagen/blob/main/examples/ghana_speech_datagen.ipynb)
 
-Pick a **GPU** runtime (Colab: `Runtime → Change runtime type → GPU`).
+Pick a **GPU** runtime (`Runtime → Change runtime type → GPU`).
+
+**Modal** (serverless GPU) — no local setup needed:
+
+```bash
+pip install modal
+modal run examples/modal_run.py --dataset ghananlpcommunity/your-text-dataset --text-column text --hours 2
+```
+
+Requires a `hf-token` Modal secret with your Hugging Face token. See [`examples/modal_run.py`](examples/modal_run.py) for all options.
 
 ## Install (local)
 
-> **Local use needs an NVIDIA GPU.** Without one, generation is impractically
-> slow — use the **Colab notebook above** instead. Clone locally only if you have
-> a GPU.
+> **Local use needs an NVIDIA GPU.** Without one, use the **Colab notebook** or
+> **Modal** runner above instead.
 
 ```bash
 git clone https://github.com/ghananlpcommunity/ghana-speech-datagen.git
