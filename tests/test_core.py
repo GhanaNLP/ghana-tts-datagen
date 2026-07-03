@@ -7,13 +7,25 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ghana_speech_datagen import clean_text, pick_gender, sanitize_name, trim_silences, SPEAKERS, resolve_speakers
+from ghana_speech_datagen import clean_text, pick_gender, pick_speaker, sanitize_name, trim_silences, SPEAKERS, resolve_speakers
 from ghana_speech_datagen import cli
 
 
 def test_clean_text():
     assert clean_text("  hello\n world  \t x ") == "hello world x"
     assert clean_text("a\n\nb") == "a b"
+
+
+def test_pick_speaker():
+    ids = ["alice", "bob", "carol"]
+    assert pick_speaker(0, ids) == "alice"
+    assert pick_speaker(1, ids) == "bob"
+    assert pick_speaker(2, ids) == "carol"
+    assert pick_speaker(3, ids) == "alice"   # wraps
+    assert pick_speaker(4, ids) == "bob"
+    assert pick_speaker(5, ids) == "carol"
+    assert pick_speaker(0, ["only"]) == "only"
+    assert pick_speaker(999, ["only"]) == "only"
 
 
 def test_pick_gender_modes():
@@ -114,52 +126,37 @@ def test_cli_speaker_args():
                                        "--ref-text", "hello"])
     assert a.speaker_dir == "/speakers"
     assert a.ref_text == "hello"
-    b = cli.build_parser().parse_args(
-        ["tts", "--text-file", "s.txt", "--speaker-male", "m.wav", "--speaker-female", "f.wav"])
-    assert b.speaker_male == "m.wav" and b.speaker_female == "f.wav"
 
 
-def test_cli_build_speakers():
+def test_cli_build_speakers(tmp_path):
+    wav1 = tmp_path / "speaker1.wav"
+    wav1.touch()
+    txt1 = tmp_path / "speaker1.txt"
+    txt1.write_text("prompt one", encoding="utf-8")
+    wav2 = tmp_path / "speaker2.wav"
+    wav2.touch()
+    txt2 = tmp_path / "speaker2.txt"
+    txt2.write_text("prompt two", encoding="utf-8")
+
     class Args:
-        speaker_dir = None
-        speaker_male = "/custom/m.wav"
-        speaker_male_text = "male prompt"
-        speaker_female = "/custom/f.wav"
-        speaker_female_text = None
+        speaker_dir = str(tmp_path)
         ref_text = None
     spk = cli._build_speakers(Args())
-    assert spk["male"]["wav"] == "/custom/m.wav"
-    assert spk["male"]["text"] == "male prompt"
-    assert spk["female"]["wav"] == "/custom/f.wav"
-    # female text should be None (will be resolved by resolve_speakers later)
-    assert "text" not in spk["female"]
+    assert set(spk) == {"speaker1", "speaker2"}
+    assert spk["speaker1"]["wav"] == str(wav1)
+    assert spk["speaker1"]["text"] == "prompt one"
+    assert spk["speaker2"]["wav"] == str(wav2)
+    assert spk["speaker2"]["text"] == "prompt two"
 
 
-def test_build_speakers_ref_text():
+def test_build_speakers_ref_text(tmp_path):
+    wav = tmp_path / "alice.wav"
+    wav.touch()
     class Args:
-        speaker_dir = None
-        speaker_male = None
-        speaker_male_text = None
-        speaker_female = None
-        speaker_female_text = None
+        speaker_dir = str(tmp_path)
         ref_text = "shared prompt"
     spk = cli._build_speakers(Args())
-    assert spk is not None
-    assert spk["male"]["text"] == "shared prompt"
-    assert spk["female"]["text"] == "shared prompt"
-
-
-def test_build_speakers_ref_text_with_explicit_male_text():
-    class Args:
-        speaker_dir = None
-        speaker_male = "/m.wav"
-        speaker_male_text = "male prompt"
-        speaker_female = "/f.wav"
-        speaker_female_text = None
-        ref_text = "shared prompt"
-    spk = cli._build_speakers(Args())
-    assert spk["male"]["text"] == "male prompt"   # explicit wins
-    assert spk["female"]["text"] == "shared prompt"  # ref_text as fallback
+    assert spk["alice"]["text"] == "shared prompt"
 
 
 def test_generate_params():

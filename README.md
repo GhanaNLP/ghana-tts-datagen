@@ -20,9 +20,12 @@ for the full list.
 
 ## Run in the cloud
 
-**Colab** (free GPU) — [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GhanaNLP/ghana-speech-datagen/blob/main/examples/ghana_speech_datagen.ipynb)
+**Colab** — [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GhanaNLP/ghana-speech-datagen/blob/main/examples/ghana_speech_datagen.ipynb)
 
 Pick a **GPU** runtime (`Runtime → Change runtime type → GPU`).
+
+**Kaggle** — [![Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://kaggle.com)  
+Open the notebook via Kaggle's GitHub import: `https://github.com/GhanaNLP/ghana-speech-datagen/blob/main/examples/ghana_speech_datagen.ipynb`
 
 **Modal** (serverless GPU) — no local setup needed:
 
@@ -73,6 +76,15 @@ ghana-speech-datagen tts --text-file sentences.txt --hours 2
 # Randomly sample 5000 texts from a large dataset
 ghana-speech-datagen tts --dataset org/big-text --text text --max-samples 5000 \
     --hours 3
+
+# Custom speaker reference audio (optional, up to 10 speakers)
+# Point to a dir with <id>.wav + optional <id>.txt sidecars.
+# Speakers cycle round-robin: row 0 → speaker0, row 1 → speaker1, ...
+ghana-speech-datagen tts --dataset org/ds --text text --hours 5 \
+    --speaker-dir /path/to/speakers/
+# Without .txt sidecars, use --ref-text as shared prompt:
+ghana-speech-datagen tts --dataset org/ds --text text --hours 5 \
+    --speaker-dir /path/to/speakers/ --ref-text "my prompt"
 
 # Resume: re-run the same command (finished rows are skipped)
 ```
@@ -142,6 +154,8 @@ data/my-repo/
 | `--token` | HF token — for gated datasets/models |
 | `--preview N` | generate N preview clips and exit |
 | `--list-datasets` | list datasets under the `ghananlpcommunity` org |
+| `--speaker-dir DIR` | dir with `<id>.wav` + optional `<id>.txt` (up to 10 speakers) |
+| `--ref-text TEXT` | fallback prompt text for speakers missing a `.txt` sidecar |
 
 Resuming is automatic: point `--name`/`--out` at an existing run folder (or just
 re-run the same command) and it reads `progress.json` and skips finished rows.

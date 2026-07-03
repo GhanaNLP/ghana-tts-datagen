@@ -141,39 +141,44 @@ def load_instance(model_id: str = MODEL_ID, precision: str = "fp32"):
     return model
 
 
+def pick_speaker(idx: int, speaker_ids: list[str]) -> str:
+    """Deterministic round-robin speaker selection from a list of speaker IDs."""
+    return speaker_ids[idx % len(speaker_ids)]
+
+
 def resolve_speakers(overrides: dict | None = None) -> dict:
     """Merge optional speaker overrides with the built-in ``SPEAKERS``.
 
-    ``overrides`` is a dict keyed by gender (``"male"``, ``"female"``) whose
-    values can have ``"wav"`` (path to WAV) and optionally ``"text"`` (prompt
-    transcript).  If ``"text"`` is omitted it is read from a sibling ``.txt``
-    (the WAV path with ``.wav`` → ``.txt``).  Unspecified genders keep the
-    bundled speaker.
+    ``overrides`` is a dict keyed by speaker id (e.g. ``"male"``, ``"female"``,
+    or any custom id matching a ``.wav`` filename). Values can have ``"wav"``
+    (path to WAV) and ``"text"`` (prompt transcript).  If ``"text"`` is omitted
+    it is read from a sibling ``.txt`` (the WAV path with ``.wav`` → ``.txt``).
+    Unspecified speaker ids keep the bundled speaker.
     """
     resolved = dict(SPEAKERS)
     if overrides:
-        for gender, sp in overrides.items():
+        for spk_id, sp in overrides.items():
             wav = sp.get("wav")
             if wav is None:
                 continue
-            txt_path = sp.get("txt") or Path(str(wav).replace(".wav", ".txt"))
+            txt_path = Path(str(wav).replace(".wav", ".txt"))
             text = sp.get("text") or txt_path.read_text(encoding="utf-8").strip()
-            resolved[gender] = {"wav": str(wav), "txt": str(txt_path), "text": text}
+            resolved[spk_id] = {"wav": str(wav), "txt": str(txt_path), "text": text}
     return resolved
 
 
-def _generate_one(model, caches: dict, text: str, gender: str,
+def _generate_one(model, caches: dict, text: str, spk_id: str,
                   cfg_value: float, steps: int,
                   speakers: dict | None = None) -> np.ndarray:
     spk = speakers or SPEAKERS
-    if gender not in caches:
-        sp = spk[gender]
-        caches[gender] = model.tts_model.build_prompt_cache(
+    if spk_id not in caches:
+        sp = spk[spk_id]
+        caches[spk_id] = model.tts_model.build_prompt_cache(
             prompt_text=sp["text"], prompt_wav_path=sp["wav"]
         )
     wav, _, _ = model.tts_model.generate_with_prompt_cache(
         target_text=text,
-        prompt_cache=caches[gender],
+        prompt_cache=caches[spk_id],
         max_len=4096,
         cfg_value=float(cfg_value),
         inference_timesteps=int(steps),
@@ -221,13 +226,13 @@ def _worker(run: _Run, model_id: str):
     caches: dict = {}
     while not (run.stop.is_set() and run.q.empty()):
         try:
-            idx, text, gender = run.q.get(timeout=2)
+            idx, text, spk_id = run.q.get(timeout=2)
         except queue.Empty:
             if run.feeding_done:
                 break
             continue
         try:
-            wav = _generate_one(model, caches, text, gender, run.cfg_value, run.steps,
+            wav = _generate_one(model, caches, text, spk_id, run.cfg_value, run.steps,
                                 speakers=run.speakers)
             wav = resample(wav, SAMPLE_RATE, run.sample_rate)
             dur = float(len(wav)) / run.sample_rate
@@ -245,7 +250,7 @@ def _worker(run: _Run, model_id: str):
             with run.lock:
                 run.rows[str(idx)] = {
                     "id": uid, "file": rel, "text": text,
-                    "gender": gender, "speaker": gender, "duration": round(dur, 3),
+                    "gender": spk_id, "speaker": spk_id, "duration": round(dur, 3),
                 }
                 run.total_seconds += dur
         except Exception as e:
@@ -331,6 +336,7 @@ def generate(
     run.precision = precision
     run.wav_dir = os.path.join(out_dir, "wavs")
     run.speakers = resolve_speakers(speakers)
+    custom_spk_ids = sorted(speakers) if speakers else []
     run.min_duration = min_duration
     run.max_duration = max_duration
 
@@ -382,10 +388,11 @@ def generate(
         text = clean_text(raw)
         if not (2 <= len(text) <= max_chars):
             continue
-        gender = pick_gender(idx, voices, male_pct)
+        spk_id = pick_speaker(idx, custom_spk_ids) if custom_spk_ids \
+            else pick_gender(idx, voices, male_pct)
         while not run.stop.is_set():
             try:
-                run.q.put((idx, text, gender), timeout=2)
+                run.q.put((idx, text, spk_id), timeout=2)
                 break
             except queue.Full:
                 pass
@@ -427,6 +434,7 @@ def preview(*, out_dir, dataset=None, text_column=None, texts=None, config=None,
     model = load_instance(model_id, precision)
     caches: dict = {}
     spk = resolve_speakers(speakers)
+    custom_spk_ids = sorted(speakers) if speakers else []
     if texts is not None:
         source = ((i, t) for i, t in enumerate(texts))
     else:
@@ -440,13 +448,14 @@ def preview(*, out_dir, dataset=None, text_column=None, texts=None, config=None,
         text = clean_text(raw)
         if not (2 <= len(text) <= max_chars):
             continue
-        gender = pick_gender(idx, voices, male_pct)
-        wav = _generate_one(model, caches, text, gender, cfg_value, steps,
+        spk_id = pick_speaker(idx, custom_spk_ids) if custom_spk_ids \
+            else pick_gender(idx, voices, male_pct)
+        wav = _generate_one(model, caches, text, spk_id, cfg_value, steps,
                             speakers=spk)
         wav = resample(wav, SAMPLE_RATE, int(sample_rate))
-        path = pdir / f"preview_{len(out)+1}_{gender}.wav"
+        path = pdir / f"preview_{len(out)+1}_{spk_id}.wav"
         sf.write(str(path), wav, int(sample_rate), subtype="PCM_16")
-        out.append({"file": str(path), "gender": gender,
+        out.append({"file": str(path), "spk_id": spk_id,
                     "duration": round(len(wav) / int(sample_rate), 2), "text": text})
     return out
 

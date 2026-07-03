@@ -120,17 +120,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     tts_spk = tts.add_argument_group("speaker reference audio")
     tts_spk.add_argument("--speaker-dir",
-                         help="dir with male.wav+txt and female.wav+txt")
-    tts_spk.add_argument("--speaker-male", metavar="WAV",
-                         help="custom male reference WAV")
-    tts_spk.add_argument("--speaker-male-text",
-                         help="male prompt transcript")
-    tts_spk.add_argument("--speaker-female", metavar="WAV",
-                         help="custom female reference WAV")
-    tts_spk.add_argument("--speaker-female-text",
-                         help="female prompt transcript")
+                         help="dir with speaker WAV files and optional <id>.txt sidecars; "
+                              "speaker IDs are derived from filenames")
     tts_spk.add_argument("--ref-text",
-                         help="reference text for both male/female speakers")
+                         help="fallback prompt text for all custom speakers "
+                              "(ignored when a speaker has its own <id>.txt)")
 
     tts_misc = tts.add_argument_group("misc")
     tts_misc.add_argument("--preview", type=int, metavar="N",
@@ -186,29 +180,23 @@ def build_parser() -> argparse.ArgumentParser:
 # --------------------------------------------------------------------------- #
 
 def _build_speakers(args) -> dict | None:
+    if not args.speaker_dir:
+        return None
+    d = Path(args.speaker_dir)
     overrides: dict = {}
-    if args.speaker_dir:
-        d = Path(args.speaker_dir)
-        overrides["male"] = {"wav": str(d / "male.wav"), "txt": d / "male.txt"}
-        overrides["female"] = {"wav": str(d / "female.wav"), "txt": d / "female.txt"}
-        if args.ref_text:
-            overrides["male"]["text"] = args.ref_text
-            overrides["female"]["text"] = args.ref_text
-        return overrides
-    if args.speaker_male:
-        m: dict = {"wav": args.speaker_male}
-        if args.speaker_male_text or args.ref_text:
-            m["text"] = args.speaker_male_text or args.ref_text
-        overrides["male"] = m
-    if args.speaker_female:
-        f: dict = {"wav": args.speaker_female}
-        if args.speaker_female_text or args.ref_text:
-            f["text"] = args.speaker_female_text or args.ref_text
-        overrides["female"] = f
-    if args.ref_text and not overrides:
-        overrides["male"] = {"text": args.ref_text}
-        overrides["female"] = {"text": args.ref_text}
-    return overrides or None
+    for wav_path in sorted(d.glob("*.wav")):
+        spk_id = wav_path.stem
+        txt_path = wav_path.with_suffix(".txt")
+        text = txt_path.read_text(encoding="utf-8").strip() if txt_path.exists() else (args.ref_text or "")
+        if not text:
+            sys.exit(f"Speaker '{spk_id}': no {txt_path.name} sidecar and no --ref-text provided. "
+                     f"Either create {txt_path.name} or pass --ref-text.")
+        overrides[spk_id] = {"wav": str(wav_path), "text": text}
+    if not overrides:
+        sys.exit(f"No .wav files found in --speaker-dir: {args.speaker_dir}")
+    if len(overrides) > 10:
+        sys.exit(f"At most 10 speakers supported, got {len(overrides)}")
+    return overrides
 
 
 def _cmd_tts(args):
@@ -237,7 +225,7 @@ def _cmd_tts(args):
             speakers=speakers,
         )
         for c in clips:
-            print(f"  [{c['gender']}] {c['duration']}s  {c['file']}\n      {c['text'][:90]}")
+            print(f"  [{c['spk_id']}] {c['duration']}s  {c['file']}\n      {c['text'][:90]}")
         return 0
 
     token = _resolve_token(args)
