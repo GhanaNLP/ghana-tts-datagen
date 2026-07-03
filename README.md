@@ -48,6 +48,11 @@ pip install -e .                        # gives you the `ghana-speech-datagen` c
 Source is **either** an HF dataset column **or** a plain text file (one sentence
 per line). Output is written in **LJSpeech** (TTS) or **ASR** format (`--format`).
 
+> `--text-column` names the column in the HF dataset that holds the sentences
+> to be turned into speech. For example, `--text-column text` means the dataset's
+> `"text"` column contains the prompts. You can point at any dataset on the Hub
+> — just tell it which column has the text.
+
 ```bash
 # Preview 5 clips first (hear it before a big run)
 ghana-speech-datagen --dataset ghananlpcommunity/your-text-dataset --text-column text --preview 5
