@@ -133,22 +133,31 @@ def build_parser() -> argparse.ArgumentParser:
                           help=f"list datasets under the {DATASET_ORG} org")
 
     # ---- asr ----
-    asr = sub.add_parser("asr", help="Generate synthetic speech using each input audio as voice reference (GPU required)",
+    asr = sub.add_parser("asr", help="Generate synthetic speech using reference audio pool (GPU required)",
                          formatter_class=argparse.RawDescriptionHelpFormatter)
-    asr_src = asr.add_argument_group("source (use --dataset OR --audio-dir)")
-    asr_src.add_argument("--dataset", help="HF dataset id with audio+text columns")
-    asr_src.add_argument("--audio-column", default="audio",
-                         help="column with reference audio (default: audio)")
-    asr_src.add_argument("--text-column", default="text",
-                         help="column with transcripts (default: text)")
-    asr_src.add_argument("--config", help="dataset config (optional)")
-    asr_src.add_argument("--split", default="train")
-    asr_src.add_argument("--audio-dir",
-                         help="local dir with audio files (use with --metadata)")
-    asr_src.add_argument("--metadata",
-                         help="CSV/JSONL mapping audio filenames to transcripts (with --audio-dir)")
+    asr_txt = asr.add_argument_group("text source (provide one)")
+    asr_txt.add_argument("--dataset", help="HF dataset with text to synthesise")
+    asr_txt.add_argument("--text", dest="text_column",
+                         help="column with text to synthesise (with --dataset)")
+    asr_txt.add_argument("--text-file", help="path to a .txt file, one sentence per line")
+    asr_txt.add_argument("--config", help="dataset config (optional)")
+    asr_txt.add_argument("--split", default="train")
 
-    asr_val = asr.add_argument_group("validation")
+    asr_ref = asr.add_argument_group("reference audio source (provide one)")
+    asr_ref.add_argument("--ref-dataset", help="HF dataset id with reference audio+transcript columns")
+    asr_ref.add_argument("--audio-column", default="audio",
+                         help="column with reference audio (default: audio)")
+    asr_ref.add_argument("--ref-text-column", default="text",
+                         help="column with reference transcripts (default: text)")
+    asr_ref.add_argument("--ref-config", help="ref dataset config (optional)")
+    asr_ref.add_argument("--ref-split", default="train")
+    asr_ref.add_argument("--ref-audio-dir",
+                         help="local dir with reference audio files (use with --ref-metadata)")
+    asr_ref.add_argument("--ref-metadata",
+                         help="CSV/JSONL mapping ref audio filenames to transcripts")
+
+    asr_val = asr.add_argument_group("generation")
+    asr_val.add_argument("--hours", type=float, default=1.0, help="target hours of audio")
     asr_val.add_argument("--min-samples", type=int, default=MIN_ASR_SAMPLES,
                          help=f"minimum valid samples required (default {MIN_ASR_SAMPLES})")
     asr_val.add_argument("--min-duration", type=float, default=1.0,
@@ -156,9 +165,9 @@ def build_parser() -> argparse.ArgumentParser:
     asr_val.add_argument("--max-duration", type=float, default=30.0,
                          help="drop generated clips longer than this (seconds)")
     asr_val.add_argument("--max-samples", type=int,
-                         help="randomly pick at most this many rows from source")
+                         help="randomly pick at most this many texts")
 
-    asr_gen = asr.add_argument_group("generation")
+    asr_gen = asr.add_argument_group("model")
     asr_gen.add_argument("--sample-rate", type=int, default=DEFAULT_SR,
                          help=f"output WAV rate (default {DEFAULT_SR})")
     asr_gen.add_argument("--precision", choices=["fp32", "fp16", "bf16"], default="fp32",
@@ -288,26 +297,51 @@ def _cmd_tts(args):
 
 
 # --------------------------------------------------------------------------- #
-# ASR flow  (validate + repackage existing audio -- no GPU needed)
+# ASR flow  (generate with reference audio pool)
 # --------------------------------------------------------------------------- #
 
-def _load_asr_rows_from_dataset(dataset: str, audio_col: str, text_col: str,
-                                 config: str | None, split: str,
-                                 max_samples: int | None, token: str):
+def _load_texts(dataset: str | None, text_column: str | None,
+                text_file: str | None, config: str | None, split: str,
+                max_samples: int | None, token: str | None) -> list[str]:
+    if text_file:
+        texts = [ln.strip() for ln in open(text_file, encoding="utf-8") if ln.strip()]
+    elif dataset and text_column:
+        from datasets import load_dataset
+        ds = load_dataset(dataset, config or None, split=split, streaming=True, token=token)
+        if max_samples:
+            ds = ds.shuffle(seed=42).take(max_samples)
+        texts = [ex.get(text_column, "").strip() for ex in ds]
+    else:
+        sys.exit("Provide --dataset + --text, or --text-file with texts to synthesise.")
+    texts = [t for t in texts if 2 <= len(t) <= 400]
+    if max_samples and len(texts) > max_samples:
+        texts = random.sample(texts, max_samples)
+    if not texts:
+        sys.exit("No valid texts found (need 2-400 chars each).")
+    return texts
+
+
+def _load_refs_from_dataset(dataset: str, audio_col: str, text_col: str,
+                             config: str | None, split: str,
+                             max_samples: int | None, token: str):
     from datasets import load_dataset
     ds = load_dataset(dataset, config or None, split=split, streaming=True, token=token)
     if max_samples:
         ds = ds.shuffle(seed=42).take(max_samples)
-    for idx, ex in enumerate(ds):
+    refs = []
+    for ex in ds:
         audio = ex.get(audio_col)
         text = ex.get(text_col)
         if audio is None or text is None:
             continue
-        yield idx, audio, str(text).strip()
+        refs.append((audio, str(text).strip()))
+    if not refs:
+        sys.exit(f"No valid reference audio+text pairs found in {dataset}.")
+    return refs
 
 
-def _load_asr_rows_from_local(audio_dir: str, metadata_path: str,
-                               max_samples: int | None):
+def _load_refs_from_local(audio_dir: str, metadata_path: str,
+                           max_samples: int | None) -> list:
     audio_dir = Path(audio_dir)
     meta = Path(metadata_path)
     rows = []
@@ -323,20 +357,15 @@ def _load_asr_rows_from_local(audio_dir: str, metadata_path: str,
                 rows.append(row)
     if max_samples and len(rows) > max_samples:
         rows = random.sample(rows, max_samples)
-    for idx, row in enumerate(rows):
-        # support both {"audio": "...", "text": "..."} and {"file": "...", "transcript": "..."}
+    refs = []
+    for row in rows:
         audio_path = row.get("audio") or row.get("file") or row.get("path", "")
         text = row.get("text") or row.get("transcript") or row.get("sentence", "")
-        yield idx, str(audio_dir / audio_path), text.strip()
-
-
-def _get_audio_duration(path: str) -> float | None:
-    try:
-        import soundfile as sf
-        info = sf.info(path)
-        return float(info.duration)
-    except Exception:
-        return None
+        if audio_path and text:
+            refs.append((str(audio_dir / audio_path), text.strip()))
+    if not refs:
+        sys.exit(f"No valid reference audio+text pairs found in {audio_dir}.")
+    return refs
 
 
 def _cmd_asr(args):
@@ -344,36 +373,48 @@ def _cmd_asr(args):
 
     token = _resolve_token(args) if (args.push or args.dataset) else None
 
-    # Determine source
-    if args.dataset:
-        if not args.audio_column or not args.text_column:
-            sys.exit("With --dataset you need --audio-column and --text-column.")
-        default_name = sanitize_name(args.dataset.split("/")[-1])
-        rows = _load_asr_rows_from_dataset(
-            args.dataset, args.audio_column, args.text_column,
-            args.config, args.split, args.max_samples, token,
+    texts = _load_texts(args.dataset, args.text_column, args.text_file,
+                        args.config, args.split, args.max_samples, token)
+
+    if args.ref_dataset:
+        refs = _load_refs_from_dataset(
+            args.ref_dataset, args.audio_column, args.ref_text_column,
+            args.ref_config, args.ref_split, None, token,
         )
-    elif args.audio_dir and args.metadata:
-        default_name = sanitize_name(os.path.basename(args.audio_dir.rstrip("/")))
-        rows = _load_asr_rows_from_local(args.audio_dir, args.metadata, args.max_samples)
+        default_name = sanitize_name(args.ref_dataset.split("/")[-1])
+    elif args.ref_audio_dir and args.ref_metadata:
+        refs = _load_refs_from_local(args.ref_audio_dir, args.ref_metadata, None)
+        default_name = sanitize_name(os.path.basename(args.ref_audio_dir.rstrip("/")))
     else:
-        sys.exit("Provide --dataset (HF) or --audio-dir + --metadata (local).")
+        sys.exit("Provide --ref-dataset or --ref-audio-dir + --ref-metadata.")
+
+    # Pair texts with random refs
+    random.shuffle(refs)
+    pairs = []
+    for i, t in enumerate(texts):
+        ref = refs[i % len(refs)]
+        pairs.append((t, ref[0], ref[1]))
 
     name = args.name or default_name
     out_dir = args.out or os.path.join("data", name)
 
     from tqdm.auto import tqdm
-    bar = tqdm(unit="clip", desc="Generating ASR clips", file=sys.stderr)
-    state = {"last": 0}
+    target_seconds = round(args.hours * 3600)
+    bar = tqdm(total=target_seconds, unit="s", unit_scale=False,
+               desc="Synthesising ASR clips", file=sys.stderr)
+    state = {"last": 0.0}
 
-    def _on_clip(_dur):
-        bar.update(1)
-        state["last"] += 1
+    def _on_clip(dur):
+        delta = dur - state["last"]
+        if delta > 0:
+            bar.update(delta)
+            state["last"] = dur
 
     summary = generator.generate_asr(
-        out_dir=out_dir, rows=rows,
+        out_dir=out_dir, pairs=pairs,
         min_duration=args.min_duration, max_duration=args.max_duration,
         min_samples=args.min_samples,
+        target_seconds=target_seconds,
         sample_rate=args.sample_rate, precision=args.precision,
         cfg_value=args.cfg_value, steps=args.steps,
         model_id=args.model, token=token,
@@ -388,7 +429,6 @@ def _cmd_asr(args):
           f" → {summary['out_dir']}", file=sys.stderr)
     print("   wavs/  manifest.jsonl  metadata.jsonl", file=sys.stderr)
 
-    # Push
     if args.push is not None or args.dataset:
         push_repo = _push_repo(name, token, args.push, args.private)
         push_url = f"https://huggingface.co/datasets/{push_repo}"

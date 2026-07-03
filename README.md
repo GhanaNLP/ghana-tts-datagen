@@ -89,30 +89,33 @@ ghana-speech-datagen tts --dataset org/ds --text text --hours 5 \
 # Resume: re-run the same command (finished rows are skipped)
 ```
 
-## Quickstart — ASR (generate audio with per-row voice references)
+## Quickstart — ASR (generate with reference audio pool)
 
-Synthesise speech using VoxCPM, using each input audio clip as the voice
-reference for its transcript. Output is ASR format (`metadata.jsonl`).
+Synthesise speech using VoxCPM from a pool of reference audio clips. Provide
+**texts to synthesise** and a **reference audio source** (HF dataset or local
+dir) — the model will speak each text in a randomly-selected reference voice.
 **GPU required.**
 
-> Each row in the source dataset provides both the text to synthesise and the
-> reference audio that defines the voice. The model reproduces the same utterance
-> in a clean synthetic form — useful for augmenting ASR training data.
-
 ```bash
-# From an HF dataset with audio + text columns
-ghana-speech-datagen asr --dataset org/audio-text-ds --audio-column audio --text-column text
+# Texts from HF dataset, ref audio from another HF dataset
+ghana-speech-datagen asr --dataset org/text-ds --text text \
+    --ref-dataset org/ref-audio-ds --ref-text-column text \
+    --hours 5
 
-# From a local directory of audio files + metadata
-ghana-speech-datagen asr --audio-dir my_clips/ --metadata transcripts.csv
+# Texts from a .txt file, ref audio from local dir + metadata
+ghana-speech-datagen asr --text-file sentences.txt \
+    --ref-audio-dir my_refs/ --ref-metadata refs.csv \
+    --hours 2
 
-# Duration filtering and sub-sampling (validates generated clip lengths)
-ghana-speech-datagen asr --dataset org/audio-text-ds --audio-column audio \
-    --text-column text --min-duration 2.0 --max-duration 25.0 --max-samples 2000
+# Sub-sample texts, apply duration filtering on generated clips
+ghana-speech-datagen asr --dataset org/text-ds --text text \
+    --ref-dataset org/ref-audio-ds --ref-text-column text \
+    --max-samples 2000 --min-duration 2.0 --max-duration 25.0
 
 # Push result to a new HF dataset repo
-ghana-speech-datagen asr --dataset org/audio-text-ds --audio-column audio \
-    --text-column text --push my-asr-repo
+ghana-speech-datagen asr --dataset org/text-ds --text text \
+    --ref-dataset org/ref-audio-ds --ref-text-column text \
+    --push my-asr-repo
 ```
 
 ## Output — TTS (`tts` subcommand)
@@ -169,14 +172,18 @@ re-run the same command) and it reads `progress.json` and skips finished rows.
 
 | flag | meaning |
 |------|---------|
-| `--dataset ID` | source: an HF dataset with audio+text columns |
-| `--audio-column COL` | column with audio (default `audio`) |
-| `--text-column COL` | column with transcripts (default `text`) |
-| `--config` / `--split` | dataset config / split (default split `train`) |
-| `--audio-dir DIR` | local dir with audio files (use with `--metadata`) |
-| `--metadata PATH` | CSV/JSONL mapping audio filenames to transcripts |
+| `--dataset ID` / `--text COL` | source: an HF dataset with text to synthesise |
+| `--text-file PATH` | source: a .txt file with text to synthesise |
+| `--config` / `--split` | dataset config / split (default `train`) |
+| `--ref-dataset ID` | HF dataset with reference audio+transcript columns |
+| `--audio-column COL` | column with reference audio (default `audio`) |
+| `--ref-text-column COL` | column with reference transcripts (default `text`) |
+| `--ref-config` / `--ref-split` | ref dataset config / split |
+| `--ref-audio-dir DIR` | local dir with ref audio (use with `--ref-metadata`) |
+| `--ref-metadata PATH` | CSV/JSONL mapping ref audio filenames to transcripts |
+| `--hours H` | target hours of audio to generate |
 | `--min-duration` / `--max-duration` | drop generated clips outside this range (seconds) |
-| `--max-samples N` | randomly pick at most this many rows from source |
+| `--max-samples N` | randomly pick at most this many texts |
 | `--min-samples N` | minimum valid samples required (default 50) |
 | `--sample-rate HZ` | output WAV rate (default 22050) |
 | `--precision fp32\|fp16\|bf16` | model precision (default fp32) |

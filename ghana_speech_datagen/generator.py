@@ -423,10 +423,11 @@ def generate(
 def generate_asr(
     *,
     out_dir: str,
-    rows,
+    pairs: list,
     min_duration: float = 1.0,
     max_duration: float = 30.0,
     min_samples: int = 50,
+    target_seconds: float = 3600,
     sample_rate: int = DEFAULT_SR,
     precision: str = "fp32",
     cfg_value: float = 2.0,
@@ -436,27 +437,29 @@ def generate_asr(
     on_clip=None,
     progress=None,
 ) -> dict:
-    """Generate synthetic speech using each row's audio as voice reference.
+    """Generate synthetic speech from texts using a pool of reference audio.
 
-    ``rows`` is an iterable of ``(idx, text, ref_audio_path)`` tuples.
-    Each row generates audio with VoxCPM using its own reference audio as the
-    voice prompt. Output is ASR format (``metadata.jsonl`` with ``audio/text``).
+    ``pairs`` is a list of ``(text_to_synthesise, ref_audio, ref_text)`` tuples.
+    For each text, a random reference audio is used as the voice prompt.
+    Output is ASR format (``wavs/`` + ``manifest.jsonl`` + ``metadata.jsonl``).
     """
     out_dir = str(out_dir)
-    os.makedirs(os.path.join(out_dir, "wavs"), exist_ok=True)
+    wav_dir = os.path.join(out_dir, "wavs")
+    os.makedirs(wav_dir, exist_ok=True)
 
     model = load_instance(model_id, precision)
-    caches: dict = {}
     valid = []
     skipped = 0
     duration_dropped = 0
+    total_sec = 0.0
 
-    for idx, text, ref_path in rows:
+    for idx, (text, ref_path, ref_text) in enumerate(pairs):
+        if total_sec >= target_seconds:
+            break
         if not text or not ref_path:
             skipped += 1
             continue
 
-        # Resolve ref audio path
         if isinstance(ref_path, dict):
             path = ref_path.get("path", "")
             if not path:
@@ -466,8 +469,8 @@ def generate_asr(
             path = str(ref_path)
 
         try:
-            wav = _generate_one(model, caches, text, f"_asr_{idx}", cfg_value, steps,
-                                speakers={f"_asr_{idx}": {"wav": path, "text": text}})
+            wav = _generate_one(model, {}, text, f"_asr_{idx}", cfg_value, steps,
+                                speakers={f"_asr_{idx}": {"wav": path, "text": ref_text}})
         except Exception:
             skipped += 1
             continue
@@ -481,7 +484,7 @@ def generate_asr(
 
         uid = f"{idx:07d}_{uuid.uuid4().hex[:8]}"
         rel = f"wavs/{uid}.wav"
-        out = os.path.join(out_dir, rel)
+        out = os.path.join(wav_dir, f"{uid}.wav")
         tmp = out + ".tmp"
         sf.write(tmp, wav, int(sample_rate), subtype="PCM_16")
         os.replace(tmp, out)
@@ -492,12 +495,10 @@ def generate_asr(
             "text": text,
             "duration": round(dur, 3),
         })
+        total_sec += dur
 
         if on_clip:
-            on_clip(dur)
-
-        if progress and len(valid) % 100 == 0:
-            progress(f"{len(valid)} valid clips so far...")
+            on_clip(total_sec)
 
     if len(valid) < min_samples:
         raise RuntimeError(
@@ -515,8 +516,7 @@ def generate_asr(
                 + "\n"
             )
 
-    total_h = sum(r["duration"] for r in valid) / 3600
-    return {"rows": len(valid), "hours": total_h,
+    return {"rows": len(valid), "hours": total_sec / 3600,
             "skipped": skipped, "duration_dropped": duration_dropped,
             "out_dir": out_dir}
 
