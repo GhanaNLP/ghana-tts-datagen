@@ -142,9 +142,11 @@ def generate(
     ``speaker_labels`` -- optional list parallel to ``pairs``; when given, each
     manifest row records which speaker voiced it (useful for multi-speaker TTS).
 
-    ``lang`` -- optional language code, recorded for bookkeeping only. VoxCPM2
-    infers language from the text's script and the reference voice, so (unlike
-    the old v1 model) no ``<|lang:|>`` control tag is injected.
+    ``lang`` -- optional language code. When set, the model's language tag
+    ``<|lang:CODE|> `` is prepended to each text *for synthesis only* — this is
+    exactly how VoxCPM2-Ghana was trained (the tag is learned as plain text, so
+    it is required for correct per-language pronunciation, especially across the
+    many Latin-script languages). The manifests still store the clean transcript.
 
     ``server_url`` / ``api_key`` / ``model`` -- how to reach the running
     vLLM-Omni TTS server (defaults come from ``TTS_SERVER_URL`` / ``TTS_API_KEY``
@@ -155,6 +157,8 @@ def generate(
     out_dir = str(out_dir)
     wav_dir = os.path.join(out_dir, "wavs")
     os.makedirs(wav_dir, exist_ok=True)
+
+    tag = f"<|lang:{lang}|> " if lang else ""
 
     def _flush(rows: list) -> list:
         """Write manifest.jsonl + requested formats; return the format paths."""
@@ -213,7 +217,7 @@ def generate(
                 continue
 
             try:
-                wav_bytes = server.synthesize(vid, text, response_format="wav")
+                wav_bytes = server.synthesize(vid, tag + text, response_format="wav")
                 data, native_sr = sf.read(io.BytesIO(wav_bytes))
                 if data.ndim > 1:
                     data = data.mean(axis=1)

@@ -14,10 +14,12 @@ ghana-speech-datagen tts --lang ewe --hours 5   # → TTS dataset (LJSpeech)
 ghana-speech-datagen asr --lang ewe --hours 5   # → ASR dataset (JSONL manifest)
 ```
 
-VoxCPM2 infers the language from the text's script and the reference voice, so
-`--lang` just selects the built-in text (and default reference pool) for that
-language. You can still bring your own text (`--dataset`/`--text-file`) and
-reference audio when you want to.
+`--lang` selects the built-in text and default reference pool for that language,
+**and** prepends the model's `<|lang:CODE|>` tag to each line at synthesis time —
+exactly how VoxCPM2-Ghana was trained (the tag is learned as plain text and is
+needed for correct per-language pronunciation). The manifests still store the
+clean transcript. You can still bring your own text (`--dataset`/`--text-file`)
+and reference audio when you want to.
 
 ## Two modes
 
@@ -211,7 +213,7 @@ The transcript in the manifests is the **clean spoken text**.
 
 | flag | meaning |
 |------|---------|
-| `--lang CODE` | use built-in default text for a language and default the reference pool to in-language audio |
+| `--lang CODE` | use built-in default text for a language, default the reference pool to in-language audio, and prepend the model's `<|lang:CODE|>` training tag at synthesis |
 | `--list-langs` | list supported languages and their default text sources |
 | `--dataset ID` / `--text COL` | source: an HF dataset with text to synthesise |
 | `--text-file PATH` | source: a .txt file with text to synthesise |
